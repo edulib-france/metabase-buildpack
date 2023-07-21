@@ -1,14 +1,107 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
-set -eu
+set -e
+set -o pipefail
 
-METABASE_VERSION=`cat ./bin/version`
-METABASE_DIR="$1/target/uberjar"
-METABASE_JAR="$METABASE_DIR/metabase.jar"
-METABASE_URL="https://downloads.metabase.com/v$METABASE_VERSION/metabase.jar"
+if [ -n "${BUILDPACK_DEBUG}" ]
+then
+    set -x
+fi
 
-mkdir -p $METABASE_DIR
 
-echo -n "-----> Downloading Metabase... from $METABASE_URL to $METABASE_JAR"
-curl -s --retry 3 -o $METABASE_JAR -L $METABASE_URL
-echo "done"
+
+build_dir="${1}"
+cache_dir="${2}"
+
+
+
+function metabase::get_latest_github_version() {
+  local rc=1
+
+  local repo
+  local api_url
+  local version
+
+  repo="metabase/metabase"
+  api_url="https://api.github.com/repos/${repo}/releases/latest"
+
+  if version="$( curl --silent --location --fail "${api_url}" | jq -r .tag_name )"; then
+    echo "${version}"
+    rc=0
+  fi
+
+  return "${rc}"
+}
+
+function metabase::get_from_cache() {
+  local rc=1
+
+  local version="${1}"
+  local cache_dir="${2}"
+
+  local cached_file
+
+  cached_file="${cache_dir}/metabase-${version}.jar"
+
+  if [ -f "${cached_file}" ]; then
+    echo "${cached_file}"
+    rc=0
+  fi
+
+  return "${rc}"
+}
+
+function metabase::download() {
+  local rc=1
+
+  local version="${1}"
+  local cache_dir="${2}"
+
+  local cached_file
+  local url
+
+  cached_file="${cache_dir}/metabase-${version}.jar"
+  url="https://downloads.metabase.com/${version}/metabase.jar"
+
+  if curl --silent --location --fail "${url}" --output "${cached_file}"; then
+    rc=0
+    echo "${cached_file}"
+  fi
+
+  return "${rc}"
+}
+
+
+
+metabase_version="${METABASE_VERSION:-"*"}"
+metabase_dir="${build_dir}/target/uberjar"
+
+# If version is given as '*' or 'latest', try to retrieve the latest version number:
+if [ "${metabase_version}" = "*" ] || [ "${metabase_version}" = "latest" ]; then
+  if ! metabase_version="$( metabase::get_latest_github_version )"; then
+    echo "Unable to retrieve Metabase latest version number. Aborting." >&2
+    return 1
+  fi
+fi
+
+# Try to get the jar file from cache (this step must not fail):
+if jar_file="$( metabase::get_from_cache "${metabase_version}" "${cache_dir}" )"; then
+  echo "Successfully retrieved Metabase ${metabase_version} from cache"
+else
+  # Try to download the file:
+  echo "Downloading Metabase ${metabase_version}"
+
+  if ! jar_file="$( metabase::download "${metabase_version}" "${cache_dir}" )"; then
+    echo "Unable to download Metabase ${metabase_version}. Aborting." >&2
+    return 1
+  fi
+fi
+
+# We have the jar file, let's put it in the right place:
+echo "Installing Metabase ${metabase_version}"
+mkdir -p "${metabase_dir}"
+cp "${jar_file}" "${metabase_dir}/metabase.jar"
+
+echo "Done"
+
+exit 0
