@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-set -e
+set -o errexit
 set -o pipefail
 
 if [ -n "${BUILDPACK_DEBUG}" ]
 then
-    set -x
+    set -o xtrace
 fi
 
 
 
-build_dir="${1}"
-cache_dir="${2}"
+readonly BUILD_DIR="${1}"
+readonly CACHE_DIR="${2}"
 
 
 
@@ -74,26 +74,30 @@ function metabase::download() {
 
 
 metabase_version="${METABASE_VERSION:-"*"}"
-metabase_dir="${build_dir}/target/uberjar"
+metabase_dir="${BUILD_DIR}/target/uberjar"
 
 # If version is given as '*' or 'latest', try to retrieve the latest version number:
 if [ "${metabase_version}" = "*" ] || [ "${metabase_version}" = "latest" ]; then
   if ! metabase_version="$( metabase::get_latest_github_version )"; then
-    echo "Unable to retrieve Metabase latest version number. Aborting." >&2
-    return 1
+    echo "Unable to retrieve Metabase latest version number." >&2
+    echo "This is probably due to the GitHub API rate-limit." >&2
+    echo "Please try to set 'METABASE_VERSION' to the desired version." >&2
+    echo "Aborting." >&2
+    exit 1
   fi
 fi
 
 # Try to get the jar file from cache (this step must not fail):
-if jar_file="$( metabase::get_from_cache "${metabase_version}" "${cache_dir}" )"; then
-  echo "Successfully retrieved Metabase ${metabase_version} from cache"
+if jar_file="$( metabase::get_from_cache "${metabase_version}" "${CACHE_DIR}" )"; then
+  echo "Successfully retrieved Metabase ${metabase_version} from cache."
 else
   # Try to download the file:
   echo "Downloading Metabase ${metabase_version}"
 
-  if ! jar_file="$( metabase::download "${metabase_version}" "${cache_dir}" )"; then
-    echo "Unable to download Metabase ${metabase_version}. Aborting." >&2
-    return 1
+  if ! jar_file="$( metabase::download "${metabase_version}" "${CACHE_DIR}" )"; then
+    echo "Unable to download Metabase ${metabase_version}." >&2
+    echo "Aborting." >&2
+    exit 1
   fi
 fi
 
