@@ -38,10 +38,16 @@ function metabase::get_from_cache() {
 
   local version="${1}"
   local cache_dir="${2}"
+  local variant="${3}"
 
   local cached_file
+  local file_prefix="${version}"
 
-  cached_file="${cache_dir}/metabase-${version}.jar"
+  if [[ ! -z $variant ]]; then
+    file_prefix="${variant}-${version}"
+  fi
+
+  cached_file="${cache_dir}/metabase-${file_prefix}.jar"
 
   if [ -f "${cached_file}" ]; then
     echo "${cached_file}"
@@ -56,12 +62,21 @@ function metabase::download() {
 
   local version="${1}"
   local cache_dir="${2}"
+  local variant="${3}"
 
   local cached_file
   local url
+  local path="${version}"
+  local file_prefix="${version}"
 
-  cached_file="${cache_dir}/metabase-${version}.jar"
-  url="https://downloads.metabase.com/${version}/metabase.jar"
+
+  if [[ ! -z $variant ]]; then
+    path="${variant}/${version}"
+    file_prefix="${variant}-${version}"
+  fi
+
+  cached_file="${cache_dir}/metabase-${file_prefix}.jar"
+  url="https://downloads.metabase.com/${path}/metabase.jar"
 
   if curl --silent --location --fail "${url}" --output "${cached_file}"; then
     rc=0
@@ -75,6 +90,7 @@ function metabase::download() {
 
 metabase_version="${METABASE_VERSION:-"*"}"
 metabase_dir="${BUILD_DIR}/target/uberjar"
+metabase_variant="${METABASE_VARIANT}"
 
 # If version is given as '*' or 'latest', try to retrieve the latest version number:
 if [ "${metabase_version}" = "*" ] || [ "${metabase_version}" = "latest" ]; then
@@ -88,21 +104,21 @@ if [ "${metabase_version}" = "*" ] || [ "${metabase_version}" = "latest" ]; then
 fi
 
 # Try to get the jar file from cache (this step must not fail):
-if jar_file="$( metabase::get_from_cache "${metabase_version}" "${CACHE_DIR}" )"; then
-  echo "Successfully retrieved Metabase ${metabase_version} from cache."
+if jar_file="$( metabase::get_from_cache "${metabase_version}" "${CACHE_DIR}" "${metabase_variant}" )"; then
+  echo "Successfully retrieved Metabase ${metabase_variant} ${metabase_version} from cache."
 else
   # Try to download the file:
-  echo "Downloading Metabase ${metabase_version}"
+  echo "Downloading Metabase ${metabase_variant} ${metabase_version}"
 
-  if ! jar_file="$( metabase::download "${metabase_version}" "${CACHE_DIR}" )"; then
-    echo "Unable to download Metabase ${metabase_version}." >&2
+  if ! jar_file="$( metabase::download "${metabase_version}" "${CACHE_DIR}" "${metabase_variant}" )"; then
+    echo "Unable to download Metabase ${metabase_variant} ${metabase_version}." >&2
     echo "Aborting." >&2
     exit 1
   fi
 fi
 
 # We have the jar file, let's put it in the right place:
-echo "Installing Metabase ${metabase_version}"
+echo "Installing Metabase ${metabase_variant} ${metabase_version}"
 mkdir -p "${metabase_dir}"
 cp "${jar_file}" "${metabase_dir}/metabase.jar"
 
