@@ -23,4 +23,22 @@ Use `*` or `latest` to instruct the buildpack to install the latest version
 available.\
 When specifying a precise version number, make sure to prefix it with a
 **`v`**! For example: `v0.46.6.1`.\
-Defaults to `*`
+Defaults to the version read from `.metabase-version` (see below), or to `*`
+when the app has no such file.
+
+### `.metabase-version`
+
+A `.metabase-version` file at the root of the app pins the version without an
+environment variable, so the deployed version lives in the app's own git
+history: a change is reviewed like any other, and a rollback is a revert.
+Blank lines, comments (`#`) and surrounding whitespace are ignored, and the
+first remaining line is used:
+
+```
+# https://github.com/metabase/metabase/releases
+v0.63.18
+```
+
+`METABASE_VERSION` still wins when it is set, so an urgent upgrade can be
+applied from the dashboard and written back to the file afterwards. Remove the
+variable to let the file take over.

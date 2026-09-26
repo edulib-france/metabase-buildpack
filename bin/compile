@@ -33,6 +33,27 @@ function metabase::get_latest_github_version() {
   return "${rc}"
 }
 
+function metabase::get_version_from_file() {
+  local rc=1
+
+  local build_dir="${1}"
+
+  local version_file="${build_dir}/.metabase-version"
+  local version
+
+  if [ -f "${version_file}" ]; then
+    # First non-empty line, comments and whitespace stripped.
+    version="$( sed -e 's/#.*$//' -e 's/[[:space:]]//g' "${version_file}" | grep -m1 . || true )"
+
+    if [ -n "${version}" ]; then
+      echo "${version}"
+      rc=0
+    fi
+  fi
+
+  return "${rc}"
+}
+
 function metabase::get_from_cache() {
   local rc=1
 
@@ -88,9 +109,21 @@ function metabase::download() {
 
 
 
-metabase_version="${METABASE_VERSION:-"*"}"
+metabase_version="${METABASE_VERSION:-}"
 metabase_dir="${BUILD_DIR}/target/uberjar"
 metabase_variant="${METABASE_VARIANT}"
+
+# A '.metabase-version' file in the app keeps the deployed version in the app's
+# own git history, where a change is reviewed and a rollback is a revert - the
+# 'METABASE_VERSION' environment variable, which still wins when it is set,
+# leaves no trace of who changed it, when, or what ran before.
+if [ -z "${metabase_version}" ]; then
+  if metabase_version="$( metabase::get_version_from_file "${BUILD_DIR}" )"; then
+    echo "Read Metabase version ${metabase_version} from .metabase-version"
+  else
+    metabase_version="*"
+  fi
+fi
 
 # If version is given as '*' or 'latest', try to retrieve the latest version number:
 if [ "${metabase_version}" = "*" ] || [ "${metabase_version}" = "latest" ]; then
